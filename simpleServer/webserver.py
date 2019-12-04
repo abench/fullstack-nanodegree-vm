@@ -31,9 +31,6 @@ class webserverHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             if self.path.endswith('/restaurants/new'):
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
                 output = ""
                 output += "<html><body>"
                 output += "<h1>Make a New Restaurant</h1>"
@@ -41,21 +38,13 @@ class webserverHandler(BaseHTTPRequestHandler):
                 output += "<input name = 'newRestaurantName' type = 'text' placeholder = 'New Restaurant Name' > "
                 output += "<input type='submit' value='Create'>"
                 output += "</form></body></html>"
-                logging.debug("Send message: %s ", output.encode('utf-8'))
-                self.wfile.write(output.encode('utf-8'))
-
 
             if self.path.endswith('/hello'):
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
                 output = ""
                 output += "<html><body>"
                 output += "<h1>Hello !</h1>"
                 output += '''<form method='POST' enctype='multipart/form-data' action='/hello'><h2>What would you like me to say?</h2><input name="message" type="text" ><input type="submit" value="Submit"> </form>'''
                 output += "</body></html>"
-                logging.debug("Send message: %s ", output.encode('utf-8'))
-                self.wfile.write(output.encode('utf-8'))
 
             if self.path.endswith('/restaurants'):
                 db = self.__get_db()
@@ -63,17 +52,44 @@ class webserverHandler(BaseHTTPRequestHandler):
                 output = "<html><body>"
                 output += "<a href = '/restaurants/new' > Make a New Restaurant Here </a></br></br>"
                 for item in restaurant_items:
-                    output += '<p>'+item.name +'</p>'
-                    output += "<a href ='#' >Edit </a> "
+                    output += '<p>{}</p>'.format(item.name)
+                    output += "<a href ='/restaurants/{}/edit' >Edit </a> ".format(item.id)
                     output += "</br>"
-                    output += "<a href =' #'> Delete </a>"
+                    output += "<a href ='/restaurants/{}/delete' >Delete </a> ".format(item.id)
                     output += "</br></br></br>"
                 output += "</body></html>"
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                logging.debug("Send message: %s ", output.encode('utf-8'))
-                self.wfile.write(output.encode('utf-8'))
+
+            if self.path.endswith('/edit'):
+                restaurant_id = self.path.split("/")[2]
+                db = self.__get_db()
+                restaurant = db.query(Restaurant).filter_by(id=restaurant_id).one()
+                if restaurant:
+                    output = "<html><body>"
+                    output += "<h1> {} </h1>".format(restaurant.name)
+                    output += "<form method='POST' enctype='multipart/form-data' action = '/restaurants/{}/edit' >".format(restaurant.id)
+                    output += "<input name = 'newRestaurantName' type='text' placeholder = '{}' >".format(restaurant.name)
+                    output += "<input type = 'submit' value = 'Rename'>"
+                    output += "</form>"
+                    output += "</body></html>"
+
+            if self.path.endswith('/delete'):
+                restaurant_id = self.path.split("/")[2]
+                db = self.__get_db()
+                restaurant = db.query(Restaurant).filter_by(id=restaurant_id).one()
+                output = ""
+                output += "<html><body>"
+                output += "<h1>Are you sure you want to delete {}?".format(restaurant.name)
+                output += "<form method='POST' enctype = 'multipart/form-data' action = '/restaurants/{}/delete'>".format(restaurant.id)
+                output += "<input type = 'submit' value = 'Delete'>"
+                output += "</form>"
+                output += "</body></html>"
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(output.encode('utf-8'))
+            logging.debug("Send message: %s ", output.encode('utf-8'))
+
             return
 
         except IOError:
@@ -95,11 +111,42 @@ class webserverHandler(BaseHTTPRequestHandler):
                 newRestaurant = Restaurant(name=restaurant_name)
                 db.add(newRestaurant)
                 db.commit()
-                self.send_response(301)
-                self.send_header('Content-type', 'text/html')
-                self.send_header('Location', '/restaurants')
-                self.end_headers()
-                return
+
+
+
+            if self.path.endswith("/edit"):
+                ctype, pdict = cgi.parse_header(
+                    self.headers['content-type'])
+                pdict['boundary'] = bytes(pdict['boundary'], "utf-8")
+
+                if ctype == 'multipart/form-data':
+                    fields = cgi.parse_multipart(self.rfile, pdict)
+                    new_reataurant_name = fields.get('newRestaurantName')[0].decode('utf-8')
+                    restaurantIDPath = self.path.split("/")[2]
+                    db = self.__get_db()
+
+                    myRestaurantQuery = db.query(Restaurant).filter_by(
+                        id=restaurantIDPath).one()
+                    if myRestaurantQuery != []:
+                        myRestaurantQuery.name = new_reataurant_name
+                        db.add(myRestaurantQuery)
+                        db.commit()
+
+            if self.path.endswith('/delete'):
+                logging.debug("Path %s",self.path)
+                restaurant_id = self.path.split("/")[2]
+                db = self.__get_db()
+                restaurant_to_delete = db.query(Restaurant).filter_by(id=restaurant_id).one()
+                if restaurant_to_delete!=[]:
+                    db.delete(restaurant_to_delete)
+                    db.commit()
+                    logging.debug("Restaurant record (id = %s, name = %s deleted) ",restaurant_to_delete.id, restaurant_to_delete.name )
+            self.send_response(301)
+            self.send_header('Content-type', 'text/html')
+            self.send_header('Location', '/restaurants')
+            self.end_headers()
+
+            return
 
         except:
             pass
