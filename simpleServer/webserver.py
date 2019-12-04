@@ -5,6 +5,8 @@ from database_setup import Base, Restaurant, MenuItem
 import cgi
 import cgitb
 cgitb.enable()
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 def init_db():
     engine = create_engine('sqlite:///restaurantmenu.db')
@@ -39,7 +41,7 @@ class webserverHandler(BaseHTTPRequestHandler):
                 output += "<input name = 'newRestaurantName' type = 'text' placeholder = 'New Restaurant Name' > "
                 output += "<input type='submit' value='Create'>"
                 output += "</form></body></html>"
-                print(output.encode('utf-8'))
+                logging.debug("Send message: %s ", output.encode('utf-8'))
                 self.wfile.write(output.encode('utf-8'))
 
 
@@ -52,8 +54,9 @@ class webserverHandler(BaseHTTPRequestHandler):
                 output += "<h1>Hello !</h1>"
                 output += '''<form method='POST' enctype='multipart/form-data' action='/hello'><h2>What would you like me to say?</h2><input name="message" type="text" ><input type="submit" value="Submit"> </form>'''
                 output += "</body></html>"
+                logging.debug("Send message: %s ", output.encode('utf-8'))
                 self.wfile.write(output.encode('utf-8'))
-                print(output.encode('utf-8'))
+
             if self.path.endswith('/restaurants'):
                 db = self.__get_db()
                 restaurant_items = db.query(Restaurant).all()
@@ -69,7 +72,7 @@ class webserverHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
                 self.end_headers()
-                print(output.encode('utf-8'))
+                logging.debug("Send message: %s ", output.encode('utf-8'))
                 self.wfile.write(output.encode('utf-8'))
             return
 
@@ -78,27 +81,25 @@ class webserverHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path.endswith('/restaurants/new'):
+                logging.debug("Headers: %s", self.headers['content-type'])
+                ctype, pdict = cgi.parse_header(
+                    self.headers['content-type'])
 
-            print("headers:")
-            print(self.headers['content-type'])
-
-            ctype, pdict = cgi.parse_header(
-                self.headers['content-type'])
-
-            pdict['boundary'] = bytes(pdict['boundary'], "utf-8")
-            print('pdict:')
-            print(pdict)
-            if ctype == 'multipart/form-data':
-                fields = cgi.parse_multipart(self.rfile, pdict)
-                restaurant_name = fields.get('newRestaurantName')[0].decode('utf-8')
-            db = self.__get_db()
-            newRestaurant = Restaurant(name=restaurant_name)
-            db.add(newRestaurant)
-            db.commit()
-            self.send_response(301)
-            self.send_header('Content-type', 'text/html')
-            self.send_header('Location', '/restaurants')
-            self.end_headers()
+                pdict['boundary'] = bytes(pdict['boundary'], "utf-8")
+                logging.debug('pdict: %s', pdict)
+                if ctype == 'multipart/form-data':
+                    fields = cgi.parse_multipart(self.rfile, pdict)
+                    restaurant_name = fields.get('newRestaurantName')[0].decode('utf-8')
+                db = self.__get_db()
+                newRestaurant = Restaurant(name=restaurant_name)
+                db.add(newRestaurant)
+                db.commit()
+                self.send_response(301)
+                self.send_header('Content-type', 'text/html')
+                self.send_header('Location', '/restaurants')
+                self.end_headers()
+                return
 
         except:
             pass
@@ -125,7 +126,7 @@ def main():
         server = HTTPServer(('', port), webserverHandler)
         server.serve_forever()
     except KeyboardInterrupt:
-        print("Stopping web server...")
+        logging.info("Stopping web server...")
         server.socket.close()
 
 if __name__ == '__main__':
